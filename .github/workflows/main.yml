@@ -1,0 +1,90 @@
+name: Build Kernel for TB-X606F
+
+on:
+  workflow_dispatch:  # 手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: 检出内核源码
+        uses: actions/checkout@v4
+        with:
+          repository: evecus/android_kernel_lenovo_X606F
+          ref: master
+          path: kernel_source
+
+      - name: 安装编译依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison build-essential ccache curl flex \
+            g++-multilib gcc-multilib git gnupg gperf imagemagick \
+            lib32ncurses5-dev lib32readline-dev lib32z1-dev \
+            liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev \
+            libssl-dev libxml2 libxml2-utils lzop pngcrush \
+            rsync schedtool squashfs-tools xsltproc zip zlib1g-dev \
+            python3 python2 make
+
+      - name: 下载 aarch64 交叉编译工具链
+        run: |
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 \
+            $HOME/toolchain/aarch64
+
+      - name: 修改 defconfig 开启 KALLSYMS_ALL
+        working-directory: kernel_source
+        run: |
+          DEFCONFIG=arch/arm64/configs/achilles6_prc_wifi_defconfig
+
+          # 如果已有 KALLSYMS 相关行就替换，没有就追加
+          if grep -q "CONFIG_KALLSYMS" $DEFCONFIG; then
+            sed -i 's/.*CONFIG_KALLSYMS.*//' $DEFCONFIG
+          fi
+
+          echo "CONFIG_KALLSYMS=y" >> $DEFCONFIG
+          echo "CONFIG_KALLSYMS_ALL=y" >> $DEFCONFIG
+
+          echo "=== KALLSYMS 配置确认 ==="
+          grep "KALLSYMS" $DEFCONFIG
+
+      - name: 编译内核
+        working-directory: kernel_source
+        run: |
+          export ARCH=arm64
+          export CROSS_COMPILE=$HOME/toolchain/aarch64/bin/aarch64-linux-android-
+          export PATH=$HOME/toolchain/aarch64/bin:$PATH
+
+          # 生成 .config
+          make O=out achilles6_prc_wifi_defconfig
+
+          # 开始编译
+          make O=out -j$(nproc) 2>&1 | tee ../build.log
+
+      - name: 检查产物
+        working-directory: kernel_source
+        run: |
+          ls -lh out/arch/arm64/boot/
+          # 优先找 Image.gz-dtb，其次 Image.gz，再次 Image
+          if [ -f out/arch/arm64/boot/Image.gz-dtb ]; then
+            echo "KERNEL_FILE=Image.gz-dtb" >> $GITHUB_ENV
+          elif [ -f out/arch/arm64/boot/Image.gz ]; then
+            echo "KERNEL_FILE=Image.gz" >> $GITHUB_ENV
+          else
+            echo "KERNEL_FILE=Image" >> $GITHUB_ENV
+          fi
+
+      - name: 上传内核文件
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-TB-X606F
+          path: kernel_source/out/arch/arm64/boot/${{ env.KERNEL_FILE }}
+          retention-days: 7
+
+      - name: 上传编译日志（用于排错）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7
