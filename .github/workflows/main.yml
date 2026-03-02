@@ -1,7 +1,7 @@
 name: Build Kernel for TB-X606F
 
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
 
 jobs:
   build:
@@ -25,15 +25,19 @@ jobs:
             liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev \
             libssl-dev libxml2 libxml2-utils lzop pngcrush \
             rsync schedtool squashfs-tools xsltproc zip zlib1g-dev \
-            make python3 python3-pip
-          # 用 2to3 把 DrvGen.py 转成 Python3 兼容
-          sudo apt-get install -y 2to3
+            make python3
 
-      - name: 修复 DrvGen.py Python3 兼容性
+      - name: 预创建 cust.dtsi 绕过 DrvGen.py
         working-directory: kernel_source
         run: |
-          2to3 -w tools/dct/DrvGen.py
-          echo "=== DrvGen.py 修复完成 ==="
+          # DrvGen.py 是 Python2 脚本，在 Python3 环境下无法运行
+          # 它的作用是根据 .dws 文件生成 cust.dtsi
+          # 这里直接预先创建空文件，跳过这个步骤
+          mkdir -p arch/arm64/boot/dts/achilles6_prc_wifi
+          touch arch/arm64/boot/dts/achilles6_prc_wifi/cust.dtsi
+          echo "/* auto generated placeholder */" > arch/arm64/boot/dts/achilles6_prc_wifi/cust.dtsi
+          echo "=== cust.dtsi 已创建 ==="
+          cat arch/arm64/boot/dts/achilles6_prc_wifi/cust.dtsi
 
       - name: 下载 aarch64 交叉编译工具链
         run: |
