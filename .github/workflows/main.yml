@@ -20,12 +20,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             bc bison build-essential ccache curl flex \
-            g++-multilib gcc-multilib git gnupg gperf imagemagick \
+            g++-multilib gcc-multilib git gnupg gperf \
             lib32ncurses5-dev lib32readline-dev lib32z1-dev \
             liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev \
             libssl-dev libxml2 libxml2-utils lzop pngcrush \
             rsync schedtool squashfs-tools xsltproc zip zlib1g-dev \
-            python3 python2 make
+            make python2 python3
+          # 让 python 命令指向 python2，修复 DrvGen.py 兼容性问题
+          sudo ln -sf /usr/bin/python2 /usr/local/bin/python
 
       - name: 下载 aarch64 交叉编译工具链
         run: |
@@ -37,11 +39,8 @@ jobs:
         run: |
           DEFCONFIG=arch/arm64/configs/achilles6_prc_wifi_defconfig
 
-          # 如果已有 KALLSYMS 相关行就替换，没有就追加
-          if grep -q "CONFIG_KALLSYMS" $DEFCONFIG; then
-            sed -i 's/.*CONFIG_KALLSYMS.*//' $DEFCONFIG
-          fi
-
+          # 删除已有 KALLSYMS 相关行，再追加正确配置
+          sed -i '/CONFIG_KALLSYMS/d' $DEFCONFIG
           echo "CONFIG_KALLSYMS=y" >> $DEFCONFIG
           echo "CONFIG_KALLSYMS_ALL=y" >> $DEFCONFIG
 
